@@ -1,6 +1,10 @@
 <?php
+// PHP PDO_SQLSRV wrapper for legacy MSSQL PHP database functions
+// https://github.com/bskrtich/mssqlwrapper
 
-if (! extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
+if (!extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
+    define('MSSQL_WRAPPER', true);
+
     //Return an associative array. Used on mssql_fetch_array()'s result_type parameter.
     define('MSSQL_ASSOC', '1');
 
@@ -37,14 +41,19 @@ if (! extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
     //Represents an eight byte float.
     define('SQLFLT8', '62');
 
+    function mssql_rtrim_by_reference(&$string) {
+        $string = rtrim($string);
+    }
+
     class MSSQL_PDO extends PDO {
-        public function __construct($dsn, $username="", $password="", $driver_options=array()) {
-            parent::__construct($dsn,$username,$password, $driver_options);
+        public function __construct($dsn, $username="", $password="", $driver_options= array()) {
+            parent::__construct($dsn, $username, $password, $driver_options);
             if (empty($driver_options[PDO::ATTR_STATEMENT_CLASS])) {
                 $this->setAttribute(PDO::ATTR_STATEMENT_CLASS, array('MSSQL_PDOStatement', array($this)));
             }
         }
     }
+
     class MSSQL_PDOStatement extends PDOStatement {
         //public $_all = null;
         public $dbh;
@@ -64,21 +73,20 @@ if (! extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
 
     function mssql_bind($stmt, $param_name, &$var, $type, $is_output = false, $is_null = false, $maxlen = -1) {
         $mssql_type_map = array(
-                SQLTEXT => PDO::PARAM_LOB,
-                SQLVARCHAR => PDO::PARAM_STR,
-                SQLCHAR => PDO::PARAM_STR,
-                SQLINT1 => PDO::PARAM_INT,
-                SQLINT2 => PDO::PARAM_INT,
-                SQLINT4 => PDO::PARAM_INT,
-                SQLBIT =>  PDO::PARAM_BOOL,
-                SQLFLT4 => PDO::PARAM_INT,
-                SQLFLT8 => PDO::PARAM_INT,
+            SQLTEXT => PDO::PARAM_LOB,
+            SQLVARCHAR => PDO::PARAM_STR,
+            SQLCHAR => PDO::PARAM_STR,
+            SQLINT1 => PDO::PARAM_INT,
+            SQLINT2 => PDO::PARAM_INT,
+            SQLINT4 => PDO::PARAM_INT,
+            SQLBIT  => PDO::PARAM_BOOL,
+            SQLFLT4 => PDO::PARAM_INT,
+            SQLFLT8 => PDO::PARAM_INT,
         );
-        $var = $is_null?null:$var;
+        $var = $is_null ? null : $var;
         $ret = $stmt->bindParam($param_name, $var, $mssql_type_map[$type], $is_output?$maxlen:($maxlen<0?null:$maxlen));
         return $ret;
     }
-
 
     function mssql_close() {
 
@@ -107,30 +115,50 @@ if (! extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
         return $stmt->execute();
     }
 
+    function mssql_fetch_row($result) {
+        if ($result) {
+            $data = $result->fetch();
+            if (is_array($data)) array_walk_recursive($data, 'mssql_rtrim_by_reference');
+            return $data;
+        }
+        return false;
+    }
 
     function mssql_fetch_array($result, $result_type = MSSQL_BOTH) {
-        $mssql_result_type = array(
+        if ($result) {
+            $mssql_result_type = array(
                 MSSQL_ASSOC => PDO::FETCH_ASSOC,
                 MSSQL_NUM =>PDO::FETCH_NUM,
                 MSSQL_BOTH => PDO::FETCH_BOTH
-        );
-        return $result->fetch($mssql_result_type[$result_type]);
+            );
+            $data = $result->fetch($mssql_result_type[$result_type]);
+            if (is_array($data)) array_walk_recursive($data, 'mssql_rtrim_by_reference');
+            return $data;
+        }
+        return false;
     }
 
     function mssql_fetch_assoc($result) {
-        return $result->fetch(PDO::FETCH_ASSOC);
+        if ($result) {
+            $data = $result->fetch(PDO::FETCH_ASSOC);
+            if (is_array($data)) array_walk_recursive($data, 'mssql_rtrim_by_reference');
+            return $data;
+        }
+        return false;
     }
 
     function mssql_fetch_object($result) {
-        return $result->fetch(PDO::FETCH_OBJ);
-    }
-
-    function mssql_fetch_row($result) {
-        return $result->fetch();
+        if ($result) {
+            return $result->fetch(PDO::FETCH_OBJ);
+        }
+        return false;
     }
 
     function mssql_free_result($result) {
-        return $stmt->closeCursor();
+        if ($result) {
+            return $stmt->closeCursor();
+        }
+        return false;
     }
 
     function mssql_free_statement($stmt) {
@@ -158,11 +186,17 @@ if (! extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
     }
 
     function mssql_num_fields($result) {
-        return $result->columnCount();
+        if ($result) {
+            return $result->columnCount();
+        }
+        return 0;
     }
 
     function mssql_num_rows($result) {
-        return $result->rowCount();
+        if ($result) {
+            return $result->rowCount();
+        }
+        return 0;
     }
 
     function mssql_query($query, $link_identifier = null, $batch_size = 0) {
@@ -172,8 +206,8 @@ if (! extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
 
         // $stmt = $link_identifier->query($query);
         $driver_options = array(
-                PDO::ATTR_CURSOR => PDO::CURSOR_SCROLL,
-                PDO::SQLSRV_ATTR_CURSOR_SCROLL_TYPE => PDO::SQLSRV_CURSOR_BUFFERED
+            PDO::ATTR_CURSOR => PDO::CURSOR_SCROLL,
+            PDO::SQLSRV_ATTR_CURSOR_SCROLL_TYPE => PDO::SQLSRV_CURSOR_BUFFERED
         );
         $stmt = $link_identifier->prepare($query, $driver_options);
         $return = $stmt->execute();
@@ -235,4 +269,7 @@ if (! extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
 
         return true;
     }
+
+} else {
+    define('MSSQL_WRAPPER', false);
 }
