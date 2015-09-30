@@ -204,12 +204,7 @@ if (!extension_loaded('mssql') && extension_loaded('pdo_sqlsrv')) {
             $link_identifier = mssql_last_link();
         }
 
-        // $stmt = $link_identifier->query($query);
-        $driver_options = array(
-            PDO::ATTR_CURSOR => PDO::CURSOR_SCROLL,
-            PDO::SQLSRV_ATTR_CURSOR_SCROLL_TYPE => PDO::SQLSRV_CURSOR_BUFFERED
-        );
-        $stmt = $link_identifier->prepare($query, $driver_options);
+        $stmt = $link_identifier->prepare($query);
         $return = $stmt->execute();
 
         // Match mssql_query behavior
